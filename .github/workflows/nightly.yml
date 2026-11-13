@@ -1,0 +1,47 @@
+name: nightly scrape
+
+on:
+  schedule:
+    - cron: "15 20 * * *"   # 20:15 UTC = 02:00 Nepal time
+  workflow_dispatch:         # "Run workflow" button for manual runs
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency: nightly
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - run: pip install requests beautifulsoup4 playwright
+      - run: python -m playwright install --with-deps chromium
+
+      - run: python -u run.py
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+
+      # data never touches git or the site in plain text: only the encrypted page ships
+      - run: |
+          test -n "$PAGE_PASSWORD" || { echo "PAGE_PASSWORD secret missing"; exit 1; }
+          mkdir plain && cp dashboard.html plain/index.html
+          npx -y staticrypt@3.5.4 plain/index.html -p "$PAGE_PASSWORD" -d site --short
+        env:
+          PAGE_PASSWORD: ${{ secrets.PAGE_PASSWORD }}
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4

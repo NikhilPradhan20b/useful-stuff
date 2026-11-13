@@ -1,0 +1,6 @@
+.env
+cache/
+__pycache__/
+*.log
+jobs.json
+dashboard.html
